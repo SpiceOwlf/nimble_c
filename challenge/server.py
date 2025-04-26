@@ -11,21 +11,24 @@ async def handle_offer(request):
     
     @pc.on('datachannel')
     def on_datachannel(channel):
+        print(f"Channel {channel.label} established")
         cnt = [0]
         
         async def send_periodic_messages():
             while True:
-                print("111111", ball_position())
-                channel.send(f"This is from server:Server message { cnt[0], ball_position()}")
-                cnt[0] += 1
-                await asyncio.sleep(2)  # Send every 2 seconds
-        
-        @channel.on('message')
-        async def on_message(message):
-            print(f"Client says: {message}")
+                try:
+                    message = f"Hello from server! Count: {cnt[0]}, ball position: {ball_position()}"
+                    print(f"Server sending: {message}")
+                    channel.send(message)
+                    cnt[0] += 1
+                    await asyncio.sleep(2)
+                except Exception as e:
+                    print(f"Error sending message: {e}")
+                    break
 
-        @channel.on("open")
-        def on_open():
+        @channel.on('message')
+        def on_message(message):
+            print(f"Client says: {message}")
             asyncio.create_task(send_periodic_messages())
 
     await pc.setRemoteDescription(offer)

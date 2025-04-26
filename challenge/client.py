@@ -11,15 +11,20 @@ class VideoClient:
 
     async def send_periodic_messages(self):
         while True:
-            self.channel.send(f"Hello from client! Message {self.message_count}")
-            self.message_count += 1
-            await asyncio.sleep(2)  # Send every 2 seconds
+            try:
+                message = f"Hello from client! Count: {self.message_count}"
+                print(f"Client sending: {message}")
+                self.channel.send(message)
+                self.message_count += 1
+                await asyncio.sleep(2)
+            except Exception as e:
+                print(f"Error sending message: {e}")
+                break
 
     async def connect(self):
         @self.channel.on("open")
         def on_open():
-            print("Channel opened!")
-            # Start sending periodic messages
+            print("Channel opened on client side!")
             asyncio.create_task(self.send_periodic_messages())
 
         @self.channel.on("message")
