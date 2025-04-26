@@ -9,6 +9,9 @@ async def handle_offer(request):
     offer = RTCSessionDescription(sdp=offer_data['sdp'], type=offer_data['type'])
     pc = RTCPeerConnection()
     
+    # Create the ball animation track
+    ball_track = BallVideoStreamTrack(fps=30)
+    
     @pc.on('datachannel')
     def on_datachannel(channel):
         print(f"Channel {channel.label} established")
@@ -17,7 +20,9 @@ async def handle_offer(request):
         async def send_periodic_messages():
             while True:
                 try:
-                    message = f"Hello from server! Count: {cnt[0]}, ball position: {ball_position()}"
+                    # Get the current ball position from our track
+                    ball_pos = ball_track.get_ball_position()  # Returns [x, y]
+                    message = f"Hello from server! Count: {cnt[0]}, ball position: ({ball_pos[0]}, {ball_pos[1]})"
                     print(f"Server sending: {message}")
                     channel.send(message)
                     cnt[0] += 1
@@ -31,6 +36,9 @@ async def handle_offer(request):
             print(f"Client says: {message}")
             asyncio.create_task(send_periodic_messages())
 
+        # Keep the ball animation running
+        asyncio.create_task(ball_track.recv())
+
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
@@ -38,13 +46,6 @@ async def handle_offer(request):
         "sdp": pc.localDescription.sdp,
         "type": pc.localDescription.type
     })
-
-def ball_position():
-    ball_position = BallVideoStreamTrack()
-    ball_position.set_fps(new_fps=45)
-    print(ball_position.get_ball_position())
-    return ball_position.get_ball_position()
-
 
 async def main():
     app = web.Application()
