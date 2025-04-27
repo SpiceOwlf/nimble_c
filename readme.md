@@ -1,4 +1,5 @@
-
+Python 3.10.13
+macos 13.6.1
 
 #Requirements:
 1. Create a simple web app as a client.
