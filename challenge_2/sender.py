@@ -1,14 +1,14 @@
 import asyncio
 import cv2
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+import numpy as np
+import base64
+import ffmpeg
+from datetime import datetime
+from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import TcpSocketSignaling
 from av import VideoFrame
-import fractions
-from datetime import datetime
-import base64
-import numpy as np
-import ffmpeg
 from findCircleCenter import detect_ball_position
+from gracefulShutDown import handle_shutdown
 
 async def setup_webrtc_and_run(ip_address, port):
     global chat_channel, video_channel
@@ -16,6 +16,7 @@ async def setup_webrtc_and_run(ip_address, port):
     pc = RTCPeerConnection()
     chat_channel = pc.createDataChannel("chat")
     video_channel = pc.createDataChannel("video")
+    
     @chat_channel.on("open")
     def on_open():
         print("Data channel opened")
@@ -34,6 +35,7 @@ async def setup_webrtc_and_run(ip_address, port):
         print("FFmpeg decoder setup successful")
     except Exception as e:
         print(f"Error setting up FFmpeg decoder: {e}")
+        await handle_shutdown(pc, [chat_channel, video_channel], None, [process])
         process = None
 
     def decode_frame(encoded_frame):
@@ -60,7 +62,7 @@ async def setup_webrtc_and_run(ip_address, port):
                     encoded_frame = base64.b64decode(message)
                     frame = decode_frame(encoded_frame)
                     ball_position_x, ball_position_y = detect_ball_position(frame)
-                    message = f"{1111111},{ball_position_x}, {ball_position_y}"
+                    message = f"from sender ball position: ,{ball_position_x}, {ball_position_y}"
                     
                     chat_channel.send(message)
                     if frame is not None:
@@ -68,12 +70,8 @@ async def setup_webrtc_and_run(ip_address, port):
                         if cv2.waitKey(1) & 0xFF == ord('q'):
                             cv2.destroyAllWindows()
 
-
-
                 except Exception as e:
                     print(f"Error processing video frame: {e}")
-
-
 
     try:
         await signaling.connect()
@@ -93,7 +91,7 @@ async def setup_webrtc_and_run(ip_address, port):
         print("Closing connection")
     finally:
         cv2.destroyAllWindows()
-        await pc.close()
+        await handle_shutdown(pc, [chat_channel, video_channel], None, [process])
 
 async def main():
     ip_address = "0.0.0.0"
