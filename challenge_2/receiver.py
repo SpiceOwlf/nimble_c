@@ -5,105 +5,77 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.signaling import TcpSocketSignaling
 from av import VideoFrame
 from datetime import datetime, timedelta
+from ballAnimation import BallVideoStreamTrack
+import threading
+import queue
+import ffmpeg
+import base64
+from ballManager import BallManager
 
-# class VideoReceiver:
-#     def __init__(self):
-#         self.track = None
 
-#     async def handle_track(self, track):
-#         print("Inside handle track")
-#         self.track = track
-#         frame_count = 0
-#         while True:
-#             try:
-#                 print("Waiting for frame...")
-#                 frame = await asyncio.wait_for(track.recv(), timeout=5.0)
-#                 frame_count += 1
-#                 print(f"Received frame {frame_count}")
-                
-#                 if isinstance(frame, VideoFrame):
-#                     print(f"Frame type: VideoFrame, pts: {frame.pts}, time_base: {frame.time_base}")
-#                     frame = frame.to_ndarray(format="bgr24")
-#                 elif isinstance(frame, np.ndarray):
-#                     print(f"Frame type: numpy array")
-#                 else:
-#                     print(f"Unexpected frame type: {type(frame)}")
-#                     continue
-              
-#                  # Add timestamp to the frame
-#                 current_time = datetime.now()
-#                 new_time = current_time - timedelta( seconds=55)
-#                 timestamp = new_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-#                 cv2.putText(frame, timestamp, (10, frame.shape[0] - 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-#                 cv2.imwrite(f"imgs/received_frame_{frame_count}.jpg", frame)
-#                 print(f"Saved frame {frame_count} to file")
-#                 cv2.imshow("Frame", frame)
-    
-#                 # Exit on 'q' key press
-#                 if cv2.waitKey(1) & 0xFF == ord('q'):
-#                     break
-#             except asyncio.TimeoutError:
-#                 print("Timeout waiting for frame, continuing...")
-#             except Exception as e:
-#                 print(f"Error in handle_track: {str(e)}")
-#                 if "Connection" in str(e):
-#                     break
-#         print("Exiting handle_track")
-
-async def run(pc, signaling):
+async def run(pc, signaling, ball_manager):
     await signaling.connect()
 
-    @pc.on("track")
-    def on_track(track):
-        if isinstance(track, MediaStreamTrack):
-            print(f"Receiving {track.kind} track")
-            asyncio.ensure_future(video_receiver.handle_track(track))
+    # Create data channel for sending video frames
+    channel = pc.createDataChannel("video")
+    print("Data channel created for video")
+
+    @channel.on("open")
+    def on_open():
+        print("Video data channel opened")
+        asyncio.create_task(send_frames(channel, ball_manager))
+
+    async def send_frames(channel, ball_manager):
+        try:
+            frame = ball_manager.get_current_frame()
+            if frame is not None:
+                # Encode the frame only when sending
+                encoded_frame = ball_manager.encode_frame(frame)
+                encoded_frame = base64.b64encode(encoded_frame).decode('utf-8')
+                channel.send(encoded_frame)
+        except Exception as e:
+            print(f"Error sending frame: {e}")
 
     @pc.on("datachannel")
     def on_datachannel(channel):
         print(f"Data channel established: {channel.label}")
         
-        @channel.on("message")
-        def on_message(message):
-            print(f"Received message from sender: {message}")
-            # You can add your message processing logic here
-            # For example, you could send a response back:
-            try:
-                channel.send(f"Received your message: {message}")
-            except Exception as e:
-                print(f"Error sending response: {e}")
+    #     @channel.on("message")
+    #     def on_message(message):
+    #         print(f"Received message from sender: {message}")
+    #         try:
+    #             channel.send(f"Received your message: {message}")
+    #         except Exception as e:
+    #             print(f"Error sending response: {e}")
+        if channel.label == "chat":
+            @channel.on("message")
+            def on_message(message):
+                print(f"Received chat message: {message}")
+                try:
+                    parts = message.split(',')
+                    if len(parts) == 3:
+                        ball_id = parts[0]
+                        ball_x = float(parts[1])
+                        ball_y = float(parts[2])
+                        print(f"Ball position: x={ball_x}, y={ball_y}")
+                    channel.send(f"Received ball position: {message}")
+                except Exception as e:
+                    print(f"Error processing chat message: {e}")
+        elif channel.label == "video":
+            @channel.on("message")
+            def on_message(message):
+                print(f"Received video message: {message}")
 
-    @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        print(f"Connection state is {pc.connectionState}")
-        if pc.connectionState == "connected":
-            print("WebRTC connection established successfully")
-        elif pc.connectionState == "failed":
-            print("Connection failed")
-            await pc.close()
-
-    print("Waiting for offer from sender...")
     offer = await signaling.receive()
-    print("Offer received")
     await pc.setRemoteDescription(offer)
-    print("Remote description set")
 
     answer = await pc.createAnswer()
-    print("Answer created")
     await pc.setLocalDescription(answer)
-    print("Local description set")
 
     await signaling.send(pc.localDescription)
-    print("Answer sent to sender")
 
-    print("Waiting for connection to be established...")
     while pc.connectionState != "connected":
         await asyncio.sleep(0.1)
-
-    # print("Connection established, waiting for frames...")
-    # await asyncio.sleep(100)  # Wait for 35 seconds to receive frames
-    print("Connection established, waiting for messages...")
-    # Keep the connection alive to receive messages
     while True:
         await asyncio.sleep(1)
     print("Closing connection")
@@ -112,16 +84,19 @@ async def main():
     signaling = TcpSocketSignaling("0.0.0.0", 8080)
     pc = RTCPeerConnection()
     
-    # global video_receiver
-    # video_receiver = VideoReceiver()
-
-    try:
-        await run(pc, signaling)
-    except Exception as e:
-        print(f"Error in main: {str(e)}")
-    finally:
-        print("Closing peer connection")
-        await pc.close()
+    # Initialize ball manager
+    ball_manager = BallManager()
+    ball_manager.start()
+    while True:
+        try:
+            await run(pc, signaling, ball_manager)
+        except Exception as e:
+            print(f"Error in main: {str(e)}")
+        finally:
+            print("Closing peer connection")
+            ball_manager.stop()
+            cv2.destroyAllWindows()
+            await pc.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
