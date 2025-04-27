@@ -13,8 +13,11 @@ Requirements:
 - invoke a function to parse the frame and determine the current location of the ball center as x,y coordinates.
 9.The web app should send the coordinates back to the server via both WebTransport.
 10.The server should compute the error to the actual location of the ball in real time (not against the same frame), and send the error back via WebTransport.
+
 11.The client should display the error in the browser.
-12.The server should properly handle signals to gracefully shutdown. 
+
+12.The server should properly handle signals to gracefully shutdown.
+
 13.Write unit tests for all functions.
 14.Document all code and design decisions.
 15.Include a screen capture (mp4, mkv, avi, etc.) of your application in action.

@@ -16,7 +16,6 @@ from ballManager import BallManager
 async def run(pc, signaling, ball_manager):
     await signaling.connect()
 
-    # Create data channel for sending video frames
     channel = pc.createDataChannel("video")
     print("Data channel created for video")
 
@@ -29,7 +28,6 @@ async def run(pc, signaling, ball_manager):
         try:
             frame = ball_manager.get_current_frame()
             if frame is not None:
-                # Encode the frame only when sending
                 encoded_frame = ball_manager.encode_frame(frame)
                 encoded_frame = base64.b64encode(encoded_frame).decode('utf-8')
                 channel.send(encoded_frame)
@@ -40,13 +38,6 @@ async def run(pc, signaling, ball_manager):
     def on_datachannel(channel):
         print(f"Data channel established: {channel.label}")
         
-    #     @channel.on("message")
-    #     def on_message(message):
-    #         print(f"Received message from sender: {message}")
-    #         try:
-    #             channel.send(f"Received your message: {message}")
-    #         except Exception as e:
-    #             print(f"Error sending response: {e}")
         if channel.label == "chat":
             @channel.on("message")
             def on_message(message):
@@ -84,7 +75,6 @@ async def main():
     signaling = TcpSocketSignaling("0.0.0.0", 8080)
     pc = RTCPeerConnection()
     
-    # Initialize ball manager
     ball_manager = BallManager()
     ball_manager.start()
     while True:

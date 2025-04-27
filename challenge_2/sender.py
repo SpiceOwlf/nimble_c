@@ -24,12 +24,10 @@ async def setup_webrtc_and_run(ip_address, port):
     def on_message(message):
         print(f"Received message: {message}")
     
-    # Set up FFmpeg decoder
     width = 640
     height = 480
     fps = 30
     try:
-        # await signaling.connect()
         stream = ffmpeg.input('pipe:', format='h264')
         stream = ffmpeg.output(stream, 'pipe:', format='rawvideo', pix_fmt='bgr24')
         process = ffmpeg.run_async(stream, pipe_stdin=True, pipe_stdout=True)
@@ -42,9 +40,7 @@ async def setup_webrtc_and_run(ip_address, port):
         if process is None:
             return None
         try:
-            # Decode the frame
             decoded_frame = process.communicate(input=encoded_frame)[0]
-            # Convert to numpy array
             frame = np.frombuffer(decoded_frame, dtype=np.uint8)
             frame = frame.reshape((height, width, 3))
             return frame
@@ -61,11 +57,9 @@ async def setup_webrtc_and_run(ip_address, port):
             @channel.on("message")
             def on_message(message):
                 try:
-                    # Decode base64 to binary
                     encoded_frame = base64.b64decode(message)
                     frame = decode_frame(encoded_frame)
                     ball_position_x, ball_position_y = detect_ball_position(frame)
-                    # print(1111111111, ball_position_x, ball_position_y)
                     message = f"{1111111},{ball_position_x}, {ball_position_y}"
                     
                     chat_channel.send(message)
@@ -98,9 +92,6 @@ async def setup_webrtc_and_run(ip_address, port):
                 break
         print("Closing connection")
     finally:
-        # if process:
-        #     process.terminate()
-        #     process.wait()
         cv2.destroyAllWindows()
         await pc.close()
 
